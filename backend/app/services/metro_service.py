@@ -1,5 +1,3 @@
-import json
-
 from app.db import connect
 from app.engines.route_quote import RoundTripDataError, quote_route, quote_round_trip
 from app.repositories import edges as edges_repo
@@ -100,21 +98,9 @@ class MetroService:
         row = runs_repo.get_by_id(self._conn, run_id)
         if row is None:
             return None
-        row = dict(row)
-        mate_id = row.get("pair_id")
-        if mate_id:
-            mate = runs_repo.get_by_id(self._conn, mate_id)
-            if mate is not None:
-                mine = json.loads(row["result_json"])
-                other = json.loads(mate["result_json"])
-                mine["path"] = other.get("path")
-                mine["hops"] = other.get("hops")
-                mine["fare"] = other.get("fare")
-                mine["start"] = other.get("start")
-                mine["end"] = other.get("end")
-                row["result_json"] = json.dumps(mine, ensure_ascii=False)
-        row["pair_id"] = row["id"]
-        return row
+        # 各看各的：去程记录只含去程站序与去程票价，返程同理；
+        # pair_id 原样返回库里的对方编号，打开记录是只读动作，不得改写。
+        return dict(row)
 
     def dashboard(self):
         st = stations_repo.list_all(self._conn)

@@ -21,32 +21,39 @@ def insert_pair(
     inbound_payload: dict,
     inbound_result: dict,
 ) -> tuple[int, int]:
-    """同一事务写往返两条记录，并互记对方编号。返回 (去程id, 返程id)。"""
+    """同一事务写往返两条记录，并互记对方编号。返回 (去程id, 返程id)。
+
+    任一步失败整体回滚：去程返程要么都落库，要么都不落库。
+    """
     now = datetime.now(timezone.utc).isoformat()
-    cur = conn.execute(
-        "INSERT INTO calc_runs(kind, input_json, result_json, created_at, pair_id) VALUES (?,?,?,?,?)",
-        (
-            kind,
-            json.dumps(outbound_payload, ensure_ascii=False),
-            json.dumps(outbound_result, ensure_ascii=False),
-            now,
-            None,
-        ),
-    )
-    outbound_id = int(cur.lastrowid)
-    cur = conn.execute(
-        "INSERT INTO calc_runs(kind, input_json, result_json, created_at, pair_id) VALUES (?,?,?,?,?)",
-        (
-            kind,
-            json.dumps(inbound_payload, ensure_ascii=False),
-            json.dumps(inbound_result, ensure_ascii=False),
-            now,
-            outbound_id,
-        ),
-    )
-    inbound_id = int(cur.lastrowid)
-    conn.execute("UPDATE calc_runs SET pair_id=? WHERE id=?", (inbound_id, outbound_id))
-    conn.commit()
+    try:
+        cur = conn.execute(
+            "INSERT INTO calc_runs(kind, input_json, result_json, created_at, pair_id) VALUES (?,?,?,?,?)",
+            (
+                kind,
+                json.dumps(outbound_payload, ensure_ascii=False),
+                json.dumps(outbound_result, ensure_ascii=False),
+                now,
+                None,
+            ),
+        )
+        outbound_id = int(cur.lastrowid)
+        cur = conn.execute(
+            "INSERT INTO calc_runs(kind, input_json, result_json, created_at, pair_id) VALUES (?,?,?,?,?)",
+            (
+                kind,
+                json.dumps(inbound_payload, ensure_ascii=False),
+                json.dumps(inbound_result, ensure_ascii=False),
+                now,
+                outbound_id,
+            ),
+        )
+        inbound_id = int(cur.lastrowid)
+        conn.execute("UPDATE calc_runs SET pair_id=? WHERE id=?", (inbound_id, outbound_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return outbound_id, inbound_id
 
 
